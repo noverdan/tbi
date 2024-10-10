@@ -1,0 +1,5 @@
+# Ignore the virtual environment folder
+venv-pbi/
+
+# Ignore the environment variable file
+.env
