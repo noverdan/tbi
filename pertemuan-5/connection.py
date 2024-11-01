@@ -14,7 +14,7 @@ class DatabaseConnection:
         try:
             self.connection = mysql.connector.connect(**config)
             self.cursor = self.connection.cursor()
-            print("Connected to the database")
+            print("Connected to the database\n")
         except Error as err:
             print(f"The error '{err}' occurred")
             

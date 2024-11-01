@@ -1,80 +1,96 @@
-from connection import DatabaseConnection
-import re #regex
+# Start Import Library
+import mysql.connector # Import mysql.connector
+from mysql.connector import Error # Import Error from mysql.connector
+import re # Regular Expression
+import numpy as np # Numerical Python (Numpy)
+from Sastrawi.Stemmer.StemmerFactory import StemmerFactory # Sastrawi Stemmer
+from Sastrawi.StopWordRemover.StopWordRemoverFactory import StopWordRemoverFactory # Sastrawi Stopword Remover
+from nltk.tokenize import word_tokenize # Natural Language Toolkit (NLTK)
+from sklearn.feature_extraction.text import TfidfVectorizer # Term Frequency-Inverse Document Frequency (TF-IDF)
+from sklearn.metrics.pairwise import cosine_similarity # Cosine Similarity
+# End Import Library
 
-from Sastrawi.StopWordRemover.StopWordRemoverFactory import StopWordRemoverFactory
-from Sastrawi.Stemmer.StemmerFactory import StemmerFactory
+# Konfigurasi Database
+db_config = {
+        "host": "mysql-students-my-student-projects.h.aivencloud.com",
+        "port": "13993",
+        "user": "galangarsandy",
+        "password": "AVNS_1coj2um74BOgK_AGXaI",
+        "database": "quran"
+    }
+class DatabaseConnection:
+    def __init__(self):
+        try:
+            self.connection = mysql.connector.connect(**db_config)
+            self.cursor = self.connection.cursor()
+            print("Connected to the database\n")
+        except Error as err:
+            print(f"The error '{err}' occurred")
+            
+    def Select(self, sql):
+        try:
+            self.cursor.execute(sql)
+            return self.cursor.fetchall()
+        except Error as err:
+            print(f"Select data ERROR: ", err)
+    
+    def __del__(self):
+        self.connection.close()  
 
-import numpy as np
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
-import nltk
-nltk.download('punkt_tab')
-from nltk.tokenize import word_tokenize
+stemmer = StemmerFactory().create_stemmer() # Membuat objek stemmer
+stopwords = StopWordRemoverFactory().create_stop_word_remover() # Membuat objek stopwords
 
-db = DatabaseConnection()
+db = DatabaseConnection() # Membuat objek database connection
+data_quran = db.Select("SELECT * FROM id_indonesian limit 50") # Mengambil data dari database
 
-query = ("SELECT * FROM id_indonesian limit 50")
-data = db.Select(query)
+corpus = [] # List untuk menampung data quran yang sudah di pre-processing
 
-factory = StopWordRemoverFactory()
-stopword = factory.create_stop_word_remover()
-factory = StemmerFactory()
-stemmer = factory.create_stemmer()
+for (index, surat, ayat, text) in data_quran:
+    pre_process = re.sub('[^a-zA-Z]', ' ', text.lower()) # Menghilaangkan karakter selain huruf a-z dan A-Z dan diubah menjadi spasi. Lalu diubah menjadi huruf kecil
+    pre_process = re.sub(' +', ' ', pre_process) # Menghilangkan spasi yang berlebihan
+    pre_process = stopwords.remove(pre_process) # Menghilangkan stopwords atau kata-kata yang tidak penting
+    pre_process = stemmer.stem(pre_process) # Melakukan stemming atau mengubah kata-kata menjadi kata dasar
+    
+    corpus.append((index, surat, ayat, pre_process)) # Menambahkan data ke dalam list corpus
+    
+doc_vocabulary = set()
+tokenized_documents = []
 
-#Create an empty list of corpus
-corpus = []
+for (index, surat, ayat, text) in corpus:
+    tokens = word_tokenize(text) # Tokenisasi kata atau memecah kalimat menjadi per kata
+    tokens = [word.lower() for word in tokens if word.isalpha()] # Menghilangkan kata yang bukan alphabet, Misal tokens = ["Hello", "world!", "123", "Python3"] menjadi ["hello", "world", "python"]
+    tokenized_documents.append(" ".join(tokens)) # Menambahkan kata-kata yang sudah di tokenisasi ke dalam list tokenized_documents
+    doc_vocabulary.update(tokens) # Menambahkan kata-kata yang unik ke dalam set vocabulary, jadi tidak ada kata yang duplikat
+    
+vectorizer = TfidfVectorizer(vocabulary=doc_vocabulary) # Membuat objek vectorizer dengan parameter vocabulary yang berisi kata-kata unik
+tfidf_matrix = vectorizer.fit_transform(tokenized_documents) # Mengubah kata-kata menjadi vektor dengan metode TF-IDF, atau menghitung bobot dari masing masing kata
 
-for (index, sura, aya, text) in data:
-    # [^a-zA-Z] means: eliminate number and punctuation, except alphabet a-z and A-Z
-    review = re.sub('[^a-zA-Z]', ' ', text)
-
-    #Lowercase operation
-    review = review.lower()
-
-    #Stopwords removal operation
-    review = stopword.remove(review)
-    jumlah_kata_awal = len(review.split())
-    kondisi = True
-    while(kondisi):
-        review = re.sub(' +', ' ', review)
-        review = stopword.remove(review)
-        jumlah_kata_baru = len(review.split())
-        if(jumlah_kata_awal == jumlah_kata_baru):
-            kondisi = False
-        else:
-            jumlah_kata_awal = jumlah_kata_baru
-    #Stemming operation
-    review = stemmer.stem(review)
-    #Add data quran verses to List
-    corpus.append((index, sura, aya, review))
-
-
-# Tokenization and vocabulary creation
-def tokenize_and_create_vocabulary(documents):
-    vocabulary = set()
-    tokenized_documents = []
-    for (index, sura, aya, review) in documents:
-        tokens = word_tokenize(review)
-        tokens = [word.lower() for word in tokens if word.isalpha()]
-        tokenized_documents.append(" ".join(tokens))
-        vocabulary.update(tokens)
-    return tokenized_documents, list(vocabulary)
-
-
-# Call tokenize_and_create_vocabulary function
-tokenized_docs, vocabulary = tokenize_and_create_vocabulary(corpus)
-# Term weighting with Term Frequency - Inverse Document Frequency (TF-IDF)
-vectorizer = TfidfVectorizer(vocabulary=vocabulary)
-tfidf_matrix = vectorizer.fit_transform(tokenized_docs)
-# Tokenization and term weighting for query
-query = input('Inputkan Kata Kunci Pencarian: ')
-query_tokens = word_tokenize(query)
+query = input("Masukkan query: ")
+query_tokens = word_tokenize(query) # Tokenisasi kata atau memecah kalimat menjadi per kata
 query_tokens = [word.lower() for word in query_tokens if word.isalpha()]
-query_vector = vectorizer.transform([" ".join(query_tokens)])
-# Similarity calculation with Cosine Similarity equation
-cosine_similarities = cosine_similarity(tfidf_matrix, query_vector)
-# Return the document most similar to the user query
-most_similar_document_index = np.argmax(cosine_similarities)
-most_similar_document = data[most_similar_document_index]
+query_vector = vectorizer.transform([" ".join(query_tokens)]) # Mengubah kata-kata menjadi vektor
+
+cosine_similarities = cosine_similarity(tfidf_matrix, query_vector) # Menghitung cosine similarity antara tfidf_matrix dan query_vector
+most_similar_document_index = np.argmax(cosine_similarities) # Mengambil index yang memiliki nilai cosine similarity paling besar
+most_similar_document = data_quran[most_similar_document_index] # Mengambil data quran yang memiliki nilai cosine similarity paling besar
+
 print("\nDokumen paling mirip dengan queri:")
 print(most_similar_document)
+
+# Jawaban Soal Nomor 3
+"""
+sorted_indices = np.argsort(cosine_similarities.flatten())[::-1] # Mengurutkan index berdasarkan nilai cosine similarity dari yang terbesar, sebelumnya cosine_similarities di flatten agar menjadi 1 dimensional array
+print("\nUrutan Hasil pencarian:")
+for index in sorted_indices:
+    print(data_quran[index])
+"""
+    
+# Jawaban Soal Nomor 2
+"""    
+def pre_processing(text):
+    pre_process = re.sub('[^a-zA-Z]', ' ', text.lower()) 
+    pre_process = re.sub(' +', ' ', pre_process) 
+    pre_process = stopwords.remove(pre_process) 
+    pre_process = stemmer.stem(pre_process) 
+    return pre_process
+"""

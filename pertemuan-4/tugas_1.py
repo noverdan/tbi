@@ -1,6 +1,6 @@
 from mysql.connector import Error
 import mysql.connector
-from tugas_2 import NotCaseSensitive
+from main import MyDocument
 
 config = {
         "host": "mysql-students-my-student-projects.h.aivencloud.com",
@@ -31,14 +31,23 @@ class DatabaseConnection:
         
 db = DatabaseConnection()
 list_mahasiswa = db.Select("SELECT nim, nama FROM mahasiswa")
+"""
+list_mahasiswa :
+    ('1', 'Dewi Tri Astutui')
+    ('2', 'Yulian Saputra')
+    ('3', 'Muhammad Tegar Putra')
+    ('4', 'Galang Arsandy')
+    ('5', 'Noverdan Putra')
+    ('6', 'Budi Sudarsono')
+    ('7', 'Anton Tri Septo')
+    ('8', 'Muhammad Galang')
+    ('9', 'Moh Bayu Gatra ')
+    ('10', 'Ayu Setiana Dewi')
+    ('11', 'Putra Sihombing')
+"""
 
-inverted_index = NotCaseSensitive()
-list_mahasiswa_inverted = inverted_index.create_inverted_index(list_mahasiswa)
-
-keywords = input("Masukan Nama Mahasiswa: ")
-
-if not keywords:
-    print("Ups Data Nama kosong! Tidak bisa dilakukan pencarian")
-    exit()
-search_result = inverted_index.search(keywords)
-print(f"{len(search_result)} NIM ditemukan dari hasil pencarian '{keywords}': {search_result}")
+document = MyDocument()
+for nim, nama in list_mahasiswa:
+    document.add_inverted_index_doc(nim, nama)
+    
+print(document.bool_retrieval_search("+Putra -Muhammad +Galang"))
